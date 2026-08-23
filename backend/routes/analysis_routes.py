@@ -27,6 +27,7 @@ def analyze_resume_route():
 
         if "resume" not in request.files:
             return jsonify({
+                "success": False,
                 "error": "Resume PDF is required."
             }), 400
 
@@ -34,11 +35,13 @@ def analyze_resume_route():
 
         if not resume_file.filename:
             return jsonify({
+                "success": False,
                 "error": "No resume file selected."
             }), 400
 
         if not resume_file.filename.lower().endswith(".pdf"):
             return jsonify({
+                "success": False,
                 "error": "Only PDF files are supported."
             }), 400
 
@@ -46,30 +49,45 @@ def analyze_resume_route():
         # 2. Get job information
         # ====================================================
 
-        job_title = request.form.get("job_title", "").strip()
-        company_name = request.form.get("company_name", "").strip()
+        job_title = request.form.get(
+            "job_title",
+            ""
+        ).strip()
+
+        company_name = request.form.get(
+            "company_name",
+            ""
+        ).strip()
+
         job_description = request.form.get(
             "job_description",
             ""
         ).strip()
 
+        # ====================================================
+        # 3. Validate job information
+        # ====================================================
+
         if not job_title:
             return jsonify({
+                "success": False,
                 "error": "Job title is required."
             }), 400
 
         if not company_name:
             return jsonify({
+                "success": False,
                 "error": "Company name is required."
             }), 400
 
         if not job_description:
             return jsonify({
+                "success": False,
                 "error": "Job description is required."
             }), 400
 
         # ====================================================
-        # 3. Save PDF temporarily
+        # 4. Save PDF temporarily
         # ====================================================
 
         with tempfile.NamedTemporaryFile(
@@ -81,7 +99,7 @@ def analyze_resume_route():
             temporary_path = temporary_file.name
 
         # ====================================================
-        # 4. Extract resume text
+        # 5. Extract resume text
         # ====================================================
 
         resume_text = extract_text_from_pdf(
@@ -89,7 +107,7 @@ def analyze_resume_route():
         )
 
         # ====================================================
-        # 5. Send resume + job information to Gemini
+        # 6. Send resume + job information to Gemini
         # ====================================================
 
         analysis_result = analyze_resume(
@@ -100,7 +118,7 @@ def analyze_resume_route():
         )
 
         # ====================================================
-        # 6. Return structured ATS result
+        # 7. Return structured ATS result
         # ====================================================
 
         return jsonify({
@@ -108,12 +126,20 @@ def analyze_resume_route():
             "data": analysis_result
         }), 200
 
+    # ========================================================
+    # Handle validation / PDF extraction errors
+    # ========================================================
+
     except ValueError as error:
 
         return jsonify({
             "success": False,
             "error": str(error)
         }), 400
+
+    # ========================================================
+    # Handle unexpected server / Gemini errors
+    # ========================================================
 
     except Exception as error:
 
@@ -124,11 +150,11 @@ def analyze_resume_route():
             "error": "Failed to analyze the resume."
         }), 500
 
-    finally:
+    # ========================================================
+    # Always delete temporary PDF
+    # ========================================================
 
-        # ====================================================
-        # 7. Always delete temporary PDF
-        # ====================================================
+    finally:
 
         if temporary_path and os.path.exists(temporary_path):
             os.remove(temporary_path)
