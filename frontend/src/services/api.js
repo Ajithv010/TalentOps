@@ -1,5 +1,10 @@
-const API_BASE_URL = "http://127.0.0.1:5000";
+const API_BASE_URL =
+  "https://talentops-tl0t.onrender.com/api";
 
+
+// =========================================================
+// Analyze Resume
+// =========================================================
 
 export async function analyzeResume({
   resumeFile,
@@ -10,14 +15,29 @@ export async function analyzeResume({
 
   const formData = new FormData();
 
-  formData.append("resume", resumeFile);
-  formData.append("job_title", jobTitle);
-  formData.append("company_name", companyName);
-  formData.append("job_description", jobDescription);
+  formData.append(
+    "resume",
+    resumeFile
+  );
+
+  formData.append(
+    "job_title",
+    jobTitle
+  );
+
+  formData.append(
+    "company_name",
+    companyName
+  );
+
+  formData.append(
+    "job_description",
+    jobDescription
+  );
 
 
   const response = await fetch(
-    `${API_BASE_URL}/api/analyze`,
+    `${API_BASE_URL}/analyze`,
     {
       method: "POST",
       body: formData,
@@ -25,15 +45,28 @@ export async function analyzeResume({
   );
 
 
-  const result = await response.json();
+  let data;
 
+  try {
 
-  if (!response.ok) {
+    data = await response.json();
+
+  } catch {
+
     throw new Error(
-      result.error || "Failed to analyze resume."
+      "The server returned an invalid response."
     );
   }
 
 
-  return result;
+  if (!response.ok) {
+
+    throw new Error(
+      data.error ||
+      "Failed to analyze the resume."
+    );
+  }
+
+
+  return data;
 }
