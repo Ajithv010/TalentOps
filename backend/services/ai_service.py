@@ -6,9 +6,11 @@ from google import genai
 from google.genai import types
 
 
-# Load variables from backend/.env
-load_dotenv()
+# =========================================================
+# LOAD ENVIRONMENT VARIABLES
+# =========================================================
 
+load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
@@ -18,10 +20,19 @@ if not GEMINI_API_KEY:
     )
 
 
-# Create Gemini client
+# =========================================================
+# GEMINI CLIENT
+# =========================================================
+
 client = genai.Client(
     api_key=GEMINI_API_KEY
 )
+
+
+# =========================================================
+# ANALYZE RESUME
+# =========================================================
+
 def analyze_resume(
     resume_text,
     job_title,
@@ -31,6 +42,9 @@ def analyze_resume(
     """
     Analyze a candidate resume against a target job
     using Google Gemini structured output.
+
+    Temperature is set to 0 to make the AI response
+    as deterministic as possible.
     """
 
     prompt = f"""
@@ -76,7 +90,8 @@ IMPORTANT RULES:
    particular job description.
 
 6. Evaluate measurable achievements and quantify
-   impact where the resume already provides evidence.
+   impact only where the resume already provides
+   evidence.
 
 7. ATS score must be an integer between 0 and 100.
 
@@ -84,12 +99,21 @@ IMPORTANT RULES:
    simply because the resume contains some matching
    keywords.
 
-9. Return only structured JSON matching the provided schema.
+9. Apply the same evaluation criteria consistently.
+
+10. Do not randomly change scores or recommendations.
+
+11. Return only structured JSON matching the provided schema.
     """
+
+    # =====================================================
+    # RESPONSE SCHEMA
+    # =====================================================
 
     response_schema = {
         "type": "OBJECT",
         "properties": {
+
             "ats_score": {
                 "type": "INTEGER"
             },
@@ -97,22 +121,28 @@ IMPORTANT RULES:
             "score_breakdown": {
                 "type": "OBJECT",
                 "properties": {
+
                     "keyword_match": {
                         "type": "INTEGER"
                     },
+
                     "technical_skills": {
                         "type": "INTEGER"
                     },
+
                     "experience_fit": {
                         "type": "INTEGER"
                     },
+
                     "education_match": {
                         "type": "INTEGER"
                     },
+
                     "project_relevance": {
                         "type": "INTEGER"
                     }
                 },
+
                 "required": [
                     "keyword_match",
                     "technical_skills",
@@ -157,19 +187,24 @@ IMPORTANT RULES:
             "resume_quality": {
                 "type": "OBJECT",
                 "properties": {
+
                     "ats_readability": {
                         "type": "INTEGER"
                     },
+
                     "content_clarity": {
                         "type": "INTEGER"
                     },
+
                     "achievement_impact": {
                         "type": "INTEGER"
                     },
+
                     "keyword_optimization": {
                         "type": "INTEGER"
                     }
                 },
+
                 "required": [
                     "ats_readability",
                     "content_clarity",
@@ -181,9 +216,11 @@ IMPORTANT RULES:
             "ai_feedback": {
                 "type": "OBJECT",
                 "properties": {
+
                     "overall": {
                         "type": "STRING"
                     },
+
                     "priority_improvements": {
                         "type": "ARRAY",
                         "items": {
@@ -191,6 +228,7 @@ IMPORTANT RULES:
                         }
                     }
                 },
+
                 "required": [
                     "overall",
                     "priority_improvements"
@@ -207,12 +245,14 @@ IMPORTANT RULES:
             "interview_insights": {
                 "type": "OBJECT",
                 "properties": {
+
                     "likely_topics": {
                         "type": "ARRAY",
                         "items": {
                             "type": "STRING"
                         }
                     },
+
                     "claims_to_prepare": {
                         "type": "ARRAY",
                         "items": {
@@ -220,6 +260,7 @@ IMPORTANT RULES:
                         }
                     }
                 },
+
                 "required": [
                     "likely_topics",
                     "claims_to_prepare"
@@ -242,25 +283,46 @@ IMPORTANT RULES:
         ]
     }
 
+    # =====================================================
+    # GEMINI REQUEST
+    # =====================================================
+
     response = client.models.generate_content(
-       model="gemini-3.6-flash",
+
+        model="gemini-3.6-flash",
+
         contents=prompt,
+
         config=types.GenerateContentConfig(
-            temperature=0.2,
+
+            # IMPORTANT:
+            # Lower temperature reduces variation.
+            temperature=0,
+
             response_mime_type="application/json",
+
             response_schema=response_schema
         )
     )
 
+    # =====================================================
+    # VALIDATE RESPONSE
+    # =====================================================
+
     if not response.text:
+
         raise RuntimeError(
             "Gemini returned an empty response."
         )
 
     try:
-        result = json.loads(response.text)
+
+        result = json.loads(
+            response.text
+        )
 
     except json.JSONDecodeError as error:
+
         raise RuntimeError(
             "Gemini returned invalid JSON."
         ) from error

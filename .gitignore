@@ -33,3 +33,7 @@ Thumbs.db
 
 # Local test files
 backend/test_files/
+
+
+backend/cache/analyses.json
+backend/cache/analyses.json.tmp
