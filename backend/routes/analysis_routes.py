@@ -31,15 +31,17 @@ def create_analysis_key(
     job_description
 ):
     """
-    Creates the same SHA-256 key for the same
-    resume and job information.
+    Creates a deterministic SHA-256 key.
+
+    Same resume text + same job information
+    = same analysis key.
     """
 
     normalized_data = "\n".join([
         resume_text.strip(),
         job_title.strip(),
         company_name.strip(),
-        job_description.strip()
+        job_description.strip(),
     ])
 
     return hashlib.sha256(
@@ -58,6 +60,12 @@ def analyze_resume_route():
 
     try:
 
+        print("\n")
+        print("=" * 70)
+        print("NEW ANALYSIS REQUEST")
+        print("=" * 70)
+
+
         # =================================================
         # 1. VALIDATE RESUME
         # =================================================
@@ -69,7 +77,9 @@ def analyze_resume_route():
                 "error": "Resume PDF is required."
             }), 400
 
+
         resume_file = request.files["resume"]
+
 
         if not resume_file.filename:
 
@@ -78,12 +88,19 @@ def analyze_resume_route():
                 "error": "No resume file selected."
             }), 400
 
+
         if not resume_file.filename.lower().endswith(".pdf"):
 
             return jsonify({
                 "success": False,
                 "error": "Only PDF files are supported."
             }), 400
+
+
+        print(
+            "Resume filename:",
+            resume_file.filename
+        )
 
 
         # =================================================
@@ -95,10 +112,12 @@ def analyze_resume_route():
             ""
         ).strip()
 
+
         company_name = request.form.get(
             "company_name",
             ""
         ).strip()
+
 
         job_description = request.form.get(
             "job_description",
@@ -117,12 +136,14 @@ def analyze_resume_route():
                 "error": "Job title is required."
             }), 400
 
+
         if not company_name:
 
             return jsonify({
                 "success": False,
                 "error": "Company name is required."
             }), 400
+
 
         if not job_description:
 
@@ -133,7 +154,27 @@ def analyze_resume_route():
 
 
         # =================================================
-        # 4. SAVE PDF TEMPORARILY
+        # 4. DEBUG INPUT INFORMATION
+        # =================================================
+
+        print(
+            "Job title:",
+            repr(job_title)
+        )
+
+        print(
+            "Company:",
+            repr(company_name)
+        )
+
+        print(
+            "Job description length:",
+            len(job_description)
+        )
+
+
+        # =================================================
+        # 5. SAVE PDF TEMPORARILY
         # =================================================
 
         with tempfile.NamedTemporaryFile(
@@ -149,12 +190,13 @@ def analyze_resume_route():
 
 
         # =================================================
-        # 5. EXTRACT RESUME TEXT
+        # 6. EXTRACT RESUME TEXT
         # =================================================
 
         resume_text = extract_text_from_pdf(
             temporary_path
         )
+
 
         if not resume_text.strip():
 
@@ -165,7 +207,25 @@ def analyze_resume_route():
 
 
         # =================================================
-        # 6. CREATE DETERMINISTIC KEY
+        # 7. DEBUG EXTRACTED RESUME
+        # =================================================
+
+        print(
+            "Resume text length:",
+            len(resume_text)
+        )
+
+
+        print(
+            "Resume text SHA-256:",
+            hashlib.sha256(
+                resume_text.encode("utf-8")
+            ).hexdigest()
+        )
+
+
+        # =================================================
+        # 8. CREATE DETERMINISTIC ANALYSIS KEY
         # =================================================
 
         analysis_key = create_analysis_key(
@@ -175,6 +235,7 @@ def analyze_resume_route():
             job_description=job_description
         )
 
+
         print(
             "Analysis key:",
             analysis_key
@@ -182,22 +243,46 @@ def analyze_resume_route():
 
 
         # =================================================
-        # 7. CHECK POSTGRESQL CACHE
+        # 9. CHECK POSTGRESQL CACHE
         # =================================================
+
+        print(
+            "Checking PostgreSQL cache..."
+        )
+
 
         cached_result = get_cached_analysis(
             analysis_key
         )
 
+
+        # =================================================
+        # 10. CACHE HIT
+        # =================================================
+
         if cached_result is not None:
 
             print(
-                "Existing analysis found in PostgreSQL."
+                "=" * 70
             )
 
             print(
-                "Returning cached result."
+                "POSTGRES CACHE HIT"
             )
+
+            print(
+                "Analysis key:",
+                analysis_key
+            )
+
+            print(
+                "Returning stored analysis."
+            )
+
+            print(
+                "=" * 70
+            )
+
 
             return jsonify({
                 "success": True,
@@ -206,46 +291,92 @@ def analyze_resume_route():
 
 
         # =================================================
-        # 8. NO CACHE → CALL GEMINI
+        # 11. CACHE MISS
         # =================================================
 
         print(
-            "No cached analysis found."
+            "=" * 70
         )
 
         print(
-            "Calling Gemini..."
+            "POSTGRES CACHE MISS"
         )
 
+        print(
+            "Analysis key:",
+            analysis_key
+        )
+
+        print(
+            "Gemini will be called."
+        )
+
+        print(
+            "=" * 70
+        )
+
+
+        # =================================================
+        # 12. CALL GEMINI
+        # =================================================
+
         analysis_result = analyze_resume(
+
             resume_text=resume_text,
+
             job_title=job_title,
+
             company_name=company_name,
+
             job_description=job_description
         )
 
 
+        print(
+            "Gemini analysis completed."
+        )
+
+
         # =================================================
-        # 9. SAVE TO POSTGRESQL
+        # 13. SAVE TO POSTGRESQL
         # =================================================
 
         save_analysis(
+
             analysis_key=analysis_key,
+
             analysis_result=analysis_result
         )
 
+
         print(
-            "Analysis saved to PostgreSQL."
+            "=" * 70
+        )
+
+        print(
+            "ANALYSIS SAVED TO POSTGRESQL"
+        )
+
+        print(
+            "Analysis key:",
+            analysis_key
+        )
+
+        print(
+            "=" * 70
         )
 
 
         # =================================================
-        # 10. RETURN RESULT
+        # 14. RETURN RESULT
         # =================================================
 
         return jsonify({
+
             "success": True,
+
             "data": analysis_result
+
         }), 200
 
 
@@ -261,25 +392,43 @@ def analyze_resume_route():
         )
 
         return jsonify({
+
             "success": False,
+
             "error": str(error)
+
         }), 400
 
 
     # =====================================================
-    # SERVER / DATABASE / GEMINI ERRORS
+    # DATABASE / GEMINI / SERVER ERRORS
     # =====================================================
 
     except Exception as error:
 
         print(
-            "Analysis error:",
-            error
+            "=" * 70
         )
 
+        print(
+            "ANALYSIS ERROR"
+        )
+
+        print(
+            repr(error)
+        )
+
+        print(
+            "=" * 70
+        )
+
+
         return jsonify({
+
             "success": False,
+
             "error": "Failed to analyze the resume."
+
         }), 500
 
 
@@ -291,7 +440,9 @@ def analyze_resume_route():
 
         if (
             temporary_path
-            and os.path.exists(temporary_path)
+            and os.path.exists(
+                temporary_path
+            )
         ):
 
             os.remove(
