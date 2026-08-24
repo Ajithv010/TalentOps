@@ -17,13 +17,6 @@ import InterviewInsights from "./components/dashboard/InterviewInsights";
 
 import { analyzeResume } from "./services/api";
 
-import { createAnalysisKey } from "./utils/analysisKey";
-
-import {
-  findAnalysisByKey,
-  saveAnalysisToCache,
-} from "./utils/analysisCache";
-
 
 function App() {
 
@@ -58,11 +51,24 @@ function App() {
   const handleAnalyze = async () => {
 
     // ---------------------------------------------------------
+    // Prevent duplicate requests
+    // ---------------------------------------------------------
+
+    if (loading) {
+      return;
+    }
+
+
+    // ---------------------------------------------------------
     // Validate resume
     // ---------------------------------------------------------
 
     if (!resumeFile) {
-      setError("Please upload your resume.");
+
+      setError(
+        "Please upload your resume."
+      );
+
       return;
     }
 
@@ -72,7 +78,11 @@ function App() {
     // ---------------------------------------------------------
 
     if (!jobTitle.trim()) {
-      setError("Please enter the job title.");
+
+      setError(
+        "Please enter the job title."
+      );
+
       return;
     }
 
@@ -82,7 +92,11 @@ function App() {
     // ---------------------------------------------------------
 
     if (!companyName.trim()) {
-      setError("Please enter the company name.");
+
+      setError(
+        "Please enter the company name."
+      );
+
       return;
     }
 
@@ -92,93 +106,96 @@ function App() {
     // ---------------------------------------------------------
 
     if (!jobDescription.trim()) {
-      setError("Please enter the job description.");
+
+      setError(
+        "Please enter the job description."
+      );
+
       return;
     }
 
 
     try {
 
+      // -------------------------------------------------------
+      // Reset previous error
+      // -------------------------------------------------------
+
       setError(null);
+
+
+      // -------------------------------------------------------
+      // Start loading
+      // -------------------------------------------------------
 
       setLoading(true);
 
 
-      // =======================================================
-      // STEP 1
-      // Create fingerprint for this exact analysis
-      // =======================================================
+      // -------------------------------------------------------
+      // Clear previous result while analyzing
+      // -------------------------------------------------------
 
-      const analysisKey = await createAnalysisKey({
-        resumeFile,
-        jobTitle,
-        companyName,
-        jobDescription,
-      });
-
-
-      console.log(
-        "Analysis key:",
-        analysisKey
-      );
+      setAnalysisResult(null);
 
 
       // =======================================================
-      // STEP 2
-      // Check cache
-      // =======================================================
-
-      const existingAnalysis =
-        findAnalysisByKey(
-          analysisKey
-        );
-
-
-      // =======================================================
-      // STEP 3
-      // Use cached result if available
-      // =======================================================
-
-      if (existingAnalysis) {
-
-        console.log(
-          "Existing analysis found. Using cached result."
-        );
-
-
-        setAnalysisResult(
-          existingAnalysis
-        );
-
-
-        return;
-      }
-
-
-      // =======================================================
-      // STEP 4
-      // No cache → call backend/Gemini
+      // SEND REQUEST TO BACKEND
       // =======================================================
 
       console.log(
-        "No cached analysis found. Calling AI..."
+        "Sending analysis request to backend..."
       );
 
 
       const result = await analyzeResume({
+
         resumeFile,
+
         jobTitle,
+
         companyName,
+
         jobDescription,
+
       });
 
 
       // =======================================================
-      // STEP 5
-      // Prepare analysis result
+      // VALIDATE BACKEND RESPONSE
       // =======================================================
 
-      const analysis = {
+      if (
+        !result ||
+        !result.success ||
+        !result.data
+      ) {
+
+        throw new Error(
+          result?.error ||
+          "Invalid analysis response."
+        );
+
+      }
+
+
+      // =======================================================
+      // USE BACKEND RESULT DIRECTLY
+      // =======================================================
+      //
+      // IMPORTANT:
+      //
+      // We do NOT create a frontend cache.
+      //
+      // We do NOT generate an analysis key here.
+      //
+      // We do NOT save anything to localStorage.
+      //
+      // PostgreSQL on the backend is the single source
+      // of truth for analysis results.
+      //
+      // =======================================================
+
+      setAnalysisResult({
 
         ...result.data,
 
@@ -186,33 +203,11 @@ function App() {
 
         companyName,
 
-        analysisKey,
-      };
-
-
-      // =======================================================
-      // STEP 6
-      // Display result
-      // =======================================================
-
-      setAnalysisResult(
-        analysis
-      );
-
-
-      // =======================================================
-      // STEP 7
-      // Save result to cache
-      // =======================================================
-
-      saveAnalysisToCache(
-        analysisKey,
-        analysis
-      );
+      });
 
 
       console.log(
-        "Analysis saved to cache."
+        "Analysis received successfully."
       );
 
 
@@ -225,16 +220,21 @@ function App() {
 
 
       setError(
-        error.message ||
+        error?.message ||
         "Failed to analyze your resume. Please try again."
       );
 
 
     } finally {
 
+      // -------------------------------------------------------
+      // Stop loading
+      // -------------------------------------------------------
+
       setLoading(false);
 
     }
+
   };
 
 
@@ -258,9 +258,13 @@ function App() {
 
 
     window.scrollTo({
+
       top: 0,
+
       behavior: "smooth",
+
     });
+
   };
 
 
@@ -269,6 +273,7 @@ function App() {
   // =========================================================
 
   return (
+
     <div className="min-h-screen bg-slate-50">
 
 
@@ -303,43 +308,76 @@ function App() {
             <div className="space-y-8">
 
 
-              {/* Resume Upload */}
+              {/* =================================================
+                  RESUME UPLOAD
+              ================================================= */}
 
               <ResumeUpload
+
                 file={resumeFile}
+
                 onFileChange={setResumeFile}
+
               />
 
 
-              {/* Job Details */}
+              {/* =================================================
+                  JOB DETAILS
+              ================================================= */}
 
               <JobDetailsForm
+
                 jobTitle={jobTitle}
+
                 companyName={companyName}
+
                 jobDescription={jobDescription}
-                onJobTitleChange={setJobTitle}
-                onCompanyNameChange={setCompanyName}
-                onJobDescriptionChange={setJobDescription}
+
+                onJobTitleChange={
+                  setJobTitle
+                }
+
+                onCompanyNameChange={
+                  setCompanyName
+                }
+
+                onJobDescriptionChange={
+                  setJobDescription
+                }
+
               />
 
 
-              {/* Analyze Button */}
+              {/* =================================================
+                  ANALYZE BUTTON
+              ================================================= */}
 
               <div className="border-t border-slate-200 pt-6">
 
                 <AnalyzeButton
+
                   onClick={handleAnalyze}
+
                   loading={loading}
+
                   disabled={
+
                     loading ||
+
                     !resumeFile ||
+
                     !jobTitle.trim() ||
+
                     !companyName.trim() ||
+
                     !jobDescription.trim()
+
                   }
+
                 />
 
               </div>
+
 
             </div>
 
@@ -360,13 +398,19 @@ function App() {
 
               <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900" />
 
+
               <h2 className="mt-5 text-lg font-semibold text-slate-900">
+
                 Analyzing your resume...
+
               </h2>
 
+
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+
                 TalentOps is comparing your resume with the
                 job description and generating your ATS analysis.
+
               </p>
 
             </div>
@@ -388,10 +432,15 @@ function App() {
 
               <div className="flex gap-4">
 
+
+                {/* Error icon */}
+
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
 
                   <span className="text-lg text-red-600">
+
                     !
+
                   </span>
 
                 </div>
@@ -399,23 +448,43 @@ function App() {
 
                 <div>
 
+
+                  {/* Error title */}
+
                   <h2 className="font-semibold text-red-900">
+
                     Analysis failed
+
                   </h2>
 
 
+                  {/* Error message */}
+
                   <p className="mt-1 text-sm leading-6 text-red-700">
+
                     {error}
+
                   </p>
 
 
+                  {/* Dismiss */}
+
                   <button
+
                     type="button"
-                    onClick={() => setError(null)}
+
+                    onClick={() =>
+                      setError(null)
+                    }
+
                     className="mt-4 text-sm font-semibold text-red-800 underline underline-offset-4 hover:text-red-950"
+
                   >
+
                     Dismiss
+
                   </button>
+
 
                 </div>
 
@@ -437,91 +506,127 @@ function App() {
           <section className="mx-auto max-w-4xl space-y-6 px-6 pb-20">
 
 
-            {/* ATS SCORE */}
+            {/* =================================================
+                ATS SCORE
+            ================================================= */}
 
             <ATSScore
+
               score={
                 analysisResult.ats_score
               }
+
             />
 
 
-            {/* SUMMARY */}
+            {/* =================================================
+                SUMMARY
+            ================================================= */}
 
             <SummaryCard
+
               summary={
                 analysisResult.summary_feedback
               }
+
             />
 
 
-            {/* SCORE BREAKDOWN */}
+            {/* =================================================
+                SCORE BREAKDOWN
+            ================================================= */}
 
             <ScoreBreakdown
+
               breakdown={
                 analysisResult.score_breakdown
               }
+
             />
 
 
-            {/* KEYWORD ANALYSIS */}
+            {/* =================================================
+                KEYWORD ANALYSIS
+            ================================================= */}
 
             <KeywordAnalysis
+
               matchedKeywords={
                 analysisResult.matched_keywords
               }
+
               missingKeywords={
                 analysisResult.missing_keywords
               }
+
             />
 
 
-            {/* RESUME QUALITY */}
+            {/* =================================================
+                RESUME QUALITY
+            ================================================= */}
 
             <ResumeQuality
+
               quality={
                 analysisResult.resume_quality
               }
+
             />
 
 
-            {/* FEEDBACK */}
+            {/* =================================================
+                FEEDBACK
+            ================================================= */}
 
             <FeedbackCard
+
               strengths={
                 analysisResult.strengths
               }
+
               weaknesses={
                 analysisResult.weaknesses
               }
+
               aiFeedback={
                 analysisResult.ai_feedback
               }
+
             />
 
 
-            {/* ACTIONABLE IMPROVEMENTS */}
+            {/* =================================================
+                ACTIONABLE IMPROVEMENTS
+            ================================================= */}
 
             <ActionableImprovements
+
               improvements={
                 analysisResult.actionable_improvements
               }
+
             />
 
 
-            {/* INTERVIEW INSIGHTS */}
+            {/* =================================================
+                INTERVIEW INSIGHTS
+            ================================================= */}
 
             <InterviewInsights
+
               likelyTopics={
                 analysisResult
                   .interview_insights
                   ?.likely_topics
               }
+
               claimsToPrepare={
                 analysisResult
                   .interview_insights
                   ?.claims_to_prepare
               }
+
             />
 
 
@@ -532,14 +637,23 @@ function App() {
             <div className="flex justify-center pt-4">
 
               <button
+
                 type="button"
-                onClick={handleNewAnalysis}
+
+                onClick={
+                  handleNewAnalysis
+                }
+
                 className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+
               >
+
                 Start New Analysis
+
               </button>
 
             </div>
+
 
           </section>
 
@@ -548,7 +662,9 @@ function App() {
       </main>
 
     </div>
+
   );
+
 }
 
 
